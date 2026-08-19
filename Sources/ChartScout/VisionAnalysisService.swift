@@ -1,12 +1,13 @@
 import Foundation
 
-enum AnalysisError: LocalizedError {
+enum AnalysisError: LocalizedError, Sendable {
     case missingKey, invalidResponse, server(String)
     var errorDescription: String? { switch self { case .missingKey: "No API key is configured."; case .invalidResponse: "The analysis response was incomplete. Please retry."; case .server(let message): message } }
 }
 
-struct VisionAnalysisService {
-    let settings: AppSettings
+struct VisionAnalysisService: Sendable {
+    let apiKey: String
+    let model: String
     private let endpoint = URL(string: "https://api.openai.com/v1/chat/completions")!
 
     func readMetadata(imageData: Data) async throws -> ChartMetadata {
@@ -29,20 +30,20 @@ struct VisionAnalysisService {
     }
 
     private func request(imageData: Data, prompt: String) async throws -> String {
-        guard let key = settings.apiKey, !key.isEmpty else { throw AnalysisError.missingKey }
+        guard !apiKey.isEmpty else { throw AnalysisError.missingKey }
         let image = imageData.base64EncodedString()
         let body: [String: Any] = [
-            "model": settings.model,
+            "model": model,
             "temperature": 0.2,
             "response_format": ["type": "json_object"],
             "messages": [["role": "user", "content": [
                 ["type": "text", "text": prompt],
                 ["type": "image_url", "image_url": ["url": "data:image/png;base64,\(image)", "detail": "high"]]
             ]]
-        ]
+        ]]
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: request)

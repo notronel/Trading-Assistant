@@ -1,23 +1,23 @@
 import Foundation
 
-struct ChartMetadata: Codable, Equatable {
+struct ChartMetadata: Codable, Equatable, Sendable {
     var symbol: String
     var timeframe: String
 }
 
-enum MarketBias: String, Codable, CaseIterable {
+enum MarketBias: String, Codable, CaseIterable, Sendable {
     case bullish, bearish
 
     var title: String { rawValue.capitalized }
 }
 
-struct KeyLevel: Codable, Identifiable, Equatable {
+struct KeyLevel: Codable, Identifiable, Equatable, Sendable {
     let label: String
     let price: Double
     var id: String { "\(label)-\(price)" }
 }
 
-struct TradeRecommendation: Codable, Equatable {
+struct TradeRecommendation: Codable, Equatable, Sendable {
     let bias: MarketBias
     let confidence: Int
     let entryLow: Double
@@ -51,7 +51,7 @@ struct JournalEntry: Codable, Identifiable, Equatable {
     var outcomeNote: String
 }
 
-struct MetadataResponse: Codable, Equatable {
+struct MetadataResponse: Codable, Equatable, Sendable {
     let symbol: String
     let timeframe: String
 }

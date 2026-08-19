@@ -39,24 +39,27 @@ final class AppCoordinator: ObservableObject {
         do {
             status = "Capturing Chrome…"
             let image = try capture.captureActiveChromeChart()
+            guard let imageData = image.pngData() else {
+                overlay.showError("Could not prepare the captured chart image.")
+                return
+            }
+            let service = VisionAnalysisService(apiKey: settings.apiKey ?? "", model: settings.model)
             overlay.showMetadata(image: image, initial: .init(symbol: "", timeframe: "")) { [weak self] metadata in
                 self?.analyze(image: image, metadata: metadata)
             }
-            Task { await detectMetadata(for: image) }
+            Task { [weak self, service, imageData] in
+                let result = try? await service.readMetadata(imageData: imageData)
+                guard let result else { return }
+                await self?.applyDetectedMetadata(result)
+            }
         } catch {
             status = error.localizedDescription
             overlay.showError(status)
         }
     }
 
-    private func detectMetadata(for image: NSImage) async {
-        guard let imageData = image.pngData() else { return }
-        do {
-            let result = try await VisionAnalysisService(settings: settings).readMetadata(imageData: imageData)
-            overlay.updateMetadata(result)
-        } catch {
-            status = "Could not read chart metadata; enter it manually."
-        }
+    private func applyDetectedMetadata(_ metadata: ChartMetadata) {
+        overlay.updateMetadata(metadata)
     }
 
     private func analyze(image: NSImage, metadata: ChartMetadata) {
@@ -68,16 +71,27 @@ final class AppCoordinator: ObservableObject {
         }
         overlay.showLoading()
         status = "Analyzing \(metadata.symbol)…"
-        Task {
+        let service = VisionAnalysisService(apiKey: settings.apiKey ?? "", model: settings.model)
+        Task { [weak self, service, imageData, metadata] in
             do {
-                let recommendation = try await VisionAnalysisService(settings: settings).analyze(imageData: imageData, metadata: metadata)
-                journalStore.add(.init(id: UUID(), createdAt: .now, metadata: metadata, recommendation: recommendation, imageData: imageData, outcomeNote: ""))
-                overlay.showRecommendation(recommendation)
-                status = "Analysis complete"
+                let recommendation = try await service.analyze(imageData: imageData, metadata: metadata)
+                guard let self else { return }
+                await self.completeAnalysis(recommendation, metadata: metadata, imageData: imageData)
             } catch {
-                status = error.localizedDescription
-                overlay.showError(status, retry: { [weak self] in self?.analyze(image: image, metadata: metadata) })
+                guard let self else { return }
+                await self.failAnalysis(error.localizedDescription, image: image, metadata: metadata)
             }
         }
+    }
+
+    private func completeAnalysis(_ recommendation: TradeRecommendation, metadata: ChartMetadata, imageData: Data) {
+        journalStore.add(.init(id: UUID(), createdAt: .now, metadata: metadata, recommendation: recommendation, imageData: imageData, outcomeNote: ""))
+        overlay.showRecommendation(recommendation)
+        status = "Analysis complete"
+    }
+
+    private func failAnalysis(_ message: String, image: NSImage, metadata: ChartMetadata) {
+        status = message
+        overlay.showError(message, retry: { [weak self, image] in self?.analyze(image: image, metadata: metadata) })
     }
 }
