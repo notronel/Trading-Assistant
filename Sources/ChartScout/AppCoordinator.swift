@@ -22,13 +22,21 @@ final class AppCoordinator: ObservableObject {
     func requestPermissions() {
         PermissionState.requestScreenRecording()
         PermissionState.requestAccessibility()
+        refreshPermissions()
+    }
+
+    func refreshPermissions() {
         permissions = .current()
     }
 
     func startCapture() {
         guard permissions.screenRecording else {
             status = "Screen Recording permission is required"
-            overlay.showError(status)
+            PermissionState.requestScreenRecording()
+            overlay.showPermissionRequired { [weak self] in
+                self?.refreshPermissions()
+                self?.startCapture()
+            }
             return
         }
         guard settings.hasAPIKey else {
@@ -50,7 +58,7 @@ final class AppCoordinator: ObservableObject {
             Task { [weak self, service, imageData] in
                 let result = try? await service.readMetadata(imageData: imageData)
                 guard let result else { return }
-                await self?.applyDetectedMetadata(result)
+                self?.applyDetectedMetadata(result)
             }
         } catch {
             status = error.localizedDescription
@@ -76,10 +84,10 @@ final class AppCoordinator: ObservableObject {
             do {
                 let recommendation = try await service.analyze(imageData: imageData, metadata: metadata)
                 guard let self else { return }
-                await self.completeAnalysis(recommendation, metadata: metadata, imageData: imageData)
+                self.completeAnalysis(recommendation, metadata: metadata, imageData: imageData)
             } catch {
                 guard let self else { return }
-                await self.failAnalysis(error.localizedDescription, image: image, metadata: metadata)
+                self.failAnalysis(error.localizedDescription, image: image, metadata: metadata)
             }
         }
     }

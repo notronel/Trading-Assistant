@@ -21,6 +21,7 @@ final class OverlayController: ObservableObject {
         return panel
     }()
     init() {
+        state.dismiss = { [weak self] in self?.hide() }
         dotPanel.orderFrontRegardless()
         cursorTimer = Timer.scheduledTimer(withTimeInterval: 1 / 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.moveDot() }
@@ -36,6 +37,7 @@ final class OverlayController: ObservableObject {
     func showLoading() { state.mode = .loading; show(at: NSEvent.mouseLocation) }
     func showRecommendation(_ recommendation: TradeRecommendation) { state.mode = .recommendation(recommendation); show(at: NSEvent.mouseLocation) }
     func showError(_ message: String, retry: (() -> Void)? = nil) { state.mode = .error(message, retry); show(at: NSEvent.mouseLocation) }
+    func showPermissionRequired(onCheck: @escaping () -> Void) { state.mode = .permissionRequired(onCheck); show(at: NSEvent.mouseLocation) }
     private func show(at point: NSPoint) { panel.setFrameOrigin(.init(x: point.x + 14, y: point.y - panel.frame.height - 14)); panel.orderFrontRegardless() }
     private func hide() { panel.orderOut(nil) }
     private func moveDot() { let point = NSEvent.mouseLocation; dotPanel.setFrameOrigin(.init(x: point.x + 12, y: point.y - 12)) }
@@ -51,8 +53,9 @@ struct PulsingDotView: View {
 }
 
 @MainActor final class OverlayState: ObservableObject {
-    enum Mode { case metadata(ChartMetadata, (ChartMetadata) -> Void), loading, recommendation(TradeRecommendation), error(String, (() -> Void)?) }
+    enum Mode { case metadata(ChartMetadata, (ChartMetadata) -> Void), loading, recommendation(TradeRecommendation), error(String, (() -> Void)?), permissionRequired(() -> Void) }
     @Published var mode: Mode = .loading
+    var dismiss: () -> Void = {}
 }
 
 struct OverlayView: View {
@@ -60,6 +63,11 @@ struct OverlayView: View {
     @State private var symbol = ""; @State private var timeframe = ""
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Spacer()
+                Button(action: state.dismiss) { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("Close ChartScout")
+            }
             switch state.mode {
             case .loading: ProgressView("Analyzing chart…").frame(width: 300, height: 90)
             case .metadata(let metadata, let confirm):
@@ -71,6 +79,13 @@ struct OverlayView: View {
             case .error(let message, let retry):
                 Text("ChartScout").font(.headline); Text(message).foregroundStyle(.secondary)
                 if let retry { Button("Try again", action: retry) }
+            case .permissionRequired(let checkPermission):
+                Text("Screen Recording required").font(.headline)
+                Text("Allow ChartScout under Screen Recording, then come back here to continue.").foregroundStyle(.secondary)
+                HStack {
+                    Button("Open System Settings", action: PermissionState.openScreenRecordingSettings)
+                    Button("I granted access", action: checkPermission).buttonStyle(.borderedProminent)
+                }
             }
         }
         .padding(16).frame(width: 340).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))

@@ -9,8 +9,12 @@ struct PermissionState {
         .init(screenRecording: CGPreflightScreenCaptureAccess(), accessibility: AXIsProcessTrusted())
     }
     static func requestScreenRecording() { _ = CGRequestScreenCaptureAccess() }
+    static func openScreenRecordingSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") else { return }
+        NSWorkspace.shared.open(url)
+    }
     static func requestAccessibility() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
     }
 }

@@ -27,15 +27,23 @@ struct SettingsView: View {
                 LabeledContent("Screen Recording", value: coordinator.permissions.screenRecording ? "Allowed" : "Required")
                 LabeledContent("Accessibility", value: coordinator.permissions.accessibility ? "Allowed" : "Required")
                 Button("Request permissions") { coordinator.requestPermissions() }
+                Button("Open Screen Recording Settings", action: PermissionState.openScreenRecordingSettings)
+                Button("Refresh permission status", action: coordinator.refreshPermissions)
             }
             Section("Analysis") {
                 SecureField("OpenAI API key", text: $apiKey)
-                TextField("Model", text: $coordinator.settings.model)
+                TextField("Model", text: Binding(
+                    get: { coordinator.settings.model },
+                    set: { coordinator.settings.model = $0 }
+                ))
                 Button("Save API key") { try? coordinator.settings.saveAPIKey(apiKey); saved = true }
                 if saved { Text("Saved securely in Keychain.").font(.caption).foregroundStyle(.green) }
             }
             Section("Shortcut") {
-                Picker("Analyze active Chrome chart", selection: $coordinator.settings.shortcut) {
+                Picker("Analyze active Chrome chart", selection: Binding(
+                    get: { coordinator.settings.shortcut },
+                    set: { coordinator.settings.shortcut = $0 }
+                )) {
                     ForEach(ShortcutChoice.allCases) { Text($0.title).tag($0) }
                 }
             }
