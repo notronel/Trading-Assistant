@@ -5,11 +5,20 @@ struct MenuContentView: View {
     @Environment(\.openWindow) private var openWindow
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("ChartScout").font(.headline)
+            HStack {
+                Text("ChartScout")
+                    .font(.headline)
+                Spacer()
+                Button(action: coordinator.showSettings) {
+                    Label("Settings", systemImage: "gearshape")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.plain)
+                .help("Open ChartScout settings")
+            }
             Text(coordinator.status).font(.caption).foregroundStyle(.secondary)
             Button("Analyze active Chrome chart", action: coordinator.startCapture).keyboardShortcut(" ", modifiers: [.command, .shift])
             Button("Open journal") { openWindow(id: "journal") }
-            SettingsLink { Text("Settings…") }
             Divider()
             Text("Informational analysis only — not financial advice.").font(.caption2).foregroundStyle(.secondary)
             Button("Quit ChartScout") { NSApplication.shared.terminate(nil) }

@@ -1,14 +1,46 @@
 import AppKit
 import SwiftUI
 
+private final class InteractivePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
+private final class WindowDragView: NSView {
+    override func mouseDown(with event: NSEvent) {
+        window?.performDrag(with: event)
+    }
+}
+
+private struct WindowDragRegion: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        WindowDragView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+private extension View {
+    @ViewBuilder
+    func chartScoutGlassBackground() -> some View {
+        if #available(macOS 27.0, *) {
+            glassEffect(.regular, in: .rect(cornerRadius: 16))
+        } else {
+            background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        }
+    }
+}
+
 @MainActor
 final class OverlayController: ObservableObject {
     private let state = OverlayState()
     private var cursorTimer: Timer?
     private lazy var panel: NSPanel = {
-        let panel = NSPanel(contentRect: .init(x: 0, y: 0, width: 360, height: 260), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let panel = InteractivePanel(contentRect: .init(x: 0, y: 0, width: 360, height: 260), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
         panel.level = .floating; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.isMovableByWindowBackground = true
+        panel.becomesKeyOnlyIfNeeded = true
         panel.ignoresMouseEvents = false
         panel.contentView = NSHostingView(rootView: OverlayView(state: state))
         return panel
@@ -38,7 +70,13 @@ final class OverlayController: ObservableObject {
     func showRecommendation(_ recommendation: TradeRecommendation) { state.mode = .recommendation(recommendation); show(at: NSEvent.mouseLocation) }
     func showError(_ message: String, retry: (() -> Void)? = nil) { state.mode = .error(message, retry); show(at: NSEvent.mouseLocation) }
     func showPermissionRequired(onCheck: @escaping () -> Void) { state.mode = .permissionRequired(onCheck); show(at: NSEvent.mouseLocation) }
-    private func show(at point: NSPoint) { panel.setFrameOrigin(.init(x: point.x + 14, y: point.y - panel.frame.height - 14)); panel.orderFrontRegardless() }
+    private func show(at point: NSPoint) {
+        if !panel.isVisible {
+            panel.setFrameOrigin(.init(x: point.x + 14, y: point.y - panel.frame.height - 14))
+        }
+        panel.orderFrontRegardless()
+        panel.makeKey()
+    }
     private func hide() { panel.orderOut(nil) }
     private func moveDot() { let point = NSEvent.mouseLocation; dotPanel.setFrameOrigin(.init(x: point.x + 12, y: point.y - 12)) }
 }
@@ -64,6 +102,12 @@ struct OverlayView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
+                Image(systemName: "line.3.horizontal")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 20)
+                    .overlay(WindowDragRegion())
+                    .accessibilityHidden(true)
+                    .help("Drag to move ChartScout")
                 Spacer()
                 Button(action: state.dismiss) { Image(systemName: "xmark.circle.fill") }
                     .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("Close ChartScout")
@@ -88,7 +132,7 @@ struct OverlayView: View {
                 }
             }
         }
-        .padding(16).frame(width: 340).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .padding(16).frame(width: 340).chartScoutGlassBackground()
     }
 }
 

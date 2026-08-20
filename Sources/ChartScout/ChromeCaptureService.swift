@@ -1,5 +1,6 @@
 import AppKit
 import CoreGraphics
+import ScreenCaptureKit
 
 enum CaptureError: LocalizedError {
     case chromeNotFrontmost, chromeWindowNotFound, captureFailed
@@ -11,13 +12,43 @@ enum CaptureError: LocalizedError {
 }
 
 struct ChromeCaptureService {
-    func captureActiveChromeChart() throws -> NSImage {
-        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.google.Chrome" else { throw CaptureError.chromeNotFrontmost }
-        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
-        guard let info = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]],
-              let window = info.first(where: { ($0[kCGWindowOwnerName as String] as? String) == "Google Chrome" && (($0[kCGWindowLayer as String] as? Int) ?? 1) == 0 }),
-              let id = window[kCGWindowNumber as String] as? CGWindowID,
-              let image = CGWindowListCreateImage(.null, .optionIncludingWindow, id, [.boundsIgnoreFraming, .bestResolution]) else { throw CaptureError.chromeWindowNotFound }
+    func captureActiveChromeChart() async throws -> NSImage {
+        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.google.Chrome" else {
+            throw CaptureError.chromeNotFrontmost
+        }
+
+        let content: SCShareableContent
+        do {
+            content = try await SCShareableContent.excludingDesktopWindows(
+                true,
+                onScreenWindowsOnly: true
+            )
+        } catch {
+            throw CaptureError.captureFailed
+        }
+
+        guard let window = content.windows.first(where: {
+            $0.owningApplication?.bundleIdentifier == "com.google.Chrome" && $0.windowLayer == 0
+        }) else {
+            throw CaptureError.chromeWindowNotFound
+        }
+
+        let configuration = SCStreamConfiguration()
+        configuration.width = max(1, Int(window.frame.width * 2))
+        configuration.height = max(1, Int(window.frame.height * 2))
+        configuration.showsCursor = false
+
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        let image: CGImage
+        do {
+            image = try await SCScreenshotManager.captureImage(
+                contentFilter: filter,
+                configuration: configuration
+            )
+        } catch {
+            throw CaptureError.captureFailed
+        }
+
         let cropped = ChartCropper.crop(image)
         return NSImage(cgImage: cropped, size: .init(width: cropped.width, height: cropped.height))
     }

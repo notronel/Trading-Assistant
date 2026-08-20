@@ -10,10 +10,6 @@ struct ChartScoutApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Settings {
-            SettingsView(coordinator: coordinator)
-        }
-
         Window("ChartScout Journal", id: "journal") {
             JournalView(store: coordinator.journalStore)
         }

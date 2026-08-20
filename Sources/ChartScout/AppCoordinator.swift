@@ -11,6 +11,7 @@ final class AppCoordinator: ObservableObject {
     private let overlay = OverlayController()
     private let hotKey = GlobalHotKey()
     private let capture = ChromeCaptureService()
+    private var settingsWindow: NSWindow?
     private var cancellables = Set<AnyCancellable>()
 
     init() {
@@ -29,16 +30,35 @@ final class AppCoordinator: ObservableObject {
         permissions = .current()
     }
 
-    func startCapture() {
-        guard permissions.screenRecording else {
-            status = "Screen Recording permission is required"
-            PermissionState.requestScreenRecording()
-            overlay.showPermissionRequired { [weak self] in
-                self?.refreshPermissions()
-                self?.startCapture()
-            }
-            return
+    func showSettings() {
+        if settingsWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 500, height: 520),
+                styleMask: [.titled, .closable, .miniaturizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "ChartScout Settings"
+            window.contentView = NSHostingView(rootView: SettingsView(coordinator: self))
+            window.isReleasedWhenClosed = false
+            window.center()
+            settingsWindow = window
         }
+
+        status = "Settings opened"
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        settingsWindow?.makeKeyAndOrderFront(nil)
+        settingsWindow?.orderFrontRegardless()
+    }
+
+    func startCapture() {
+        Task {
+            await startCapture(isPermissionRetry: false)
+        }
+    }
+
+    private func startCapture(isPermissionRetry: Bool) async {
+        refreshPermissions()
         guard settings.hasAPIKey else {
             status = "Add an API key in Settings first"
             overlay.showError(status)
@@ -46,7 +66,7 @@ final class AppCoordinator: ObservableObject {
         }
         do {
             status = "Capturing Chrome…"
-            let image = try capture.captureActiveChromeChart()
+            let image = try await capture.captureActiveChromeChart()
             guard let imageData = image.pngData() else {
                 overlay.showError("Could not prepare the captured chart image.")
                 return
@@ -59,6 +79,19 @@ final class AppCoordinator: ObservableObject {
                 let result = try? await service.readMetadata(imageData: imageData)
                 guard let result else { return }
                 self?.applyDetectedMetadata(result)
+            }
+        } catch CaptureError.captureFailed {
+            if isPermissionRetry {
+                status = "macOS is still denying screen capture for this ChartScout build. Remove the old ChartScout entry in Screen & System Audio Recording, add this build again, then quit and reopen ChartScout."
+                overlay.showError(status)
+            } else {
+                status = "Screen Recording permission is required"
+                PermissionState.requestScreenRecording()
+                overlay.showPermissionRequired { [weak self] in
+                    Task {
+                        await self?.startCapture(isPermissionRetry: true)
+                    }
+                }
             }
         } catch {
             status = error.localizedDescription
