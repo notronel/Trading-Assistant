@@ -10,7 +10,7 @@ final class AppSettings: ObservableObject {
     private let keychain = KeychainStore(service: "com.chartscout.api")
 
     init() {
-        model = defaults.string(forKey: "model") ?? "gpt-4.1-mini"
+        model = defaults.string(forKey: "model") ?? "gpt-5.6-luna"
         shortcut = ShortcutChoice(rawValue: defaults.string(forKey: "shortcut") ?? "commandShiftSpace") ?? .commandShiftSpace
     }
     var hasAPIKey: Bool { !(apiKey?.isEmpty ?? true) }
