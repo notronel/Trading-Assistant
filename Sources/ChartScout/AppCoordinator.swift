@@ -117,7 +117,7 @@ final class AppCoordinator: ObservableObject {
             do {
                 let recommendation = try await service.analyze(imageData: imageData, metadata: metadata)
                 guard let self else { return }
-                self.completeAnalysis(recommendation, metadata: metadata, imageData: imageData)
+                self.completeAnalysis(recommendation, image: image, metadata: metadata, imageData: imageData)
             } catch {
                 guard let self else { return }
                 self.failAnalysis(error.localizedDescription, image: image, metadata: metadata)
@@ -125,9 +125,11 @@ final class AppCoordinator: ObservableObject {
         }
     }
 
-    private func completeAnalysis(_ recommendation: TradeRecommendation, metadata: ChartMetadata, imageData: Data) {
+    private func completeAnalysis(_ recommendation: TradeRecommendation, image: NSImage, metadata: ChartMetadata, imageData: Data) {
         journalStore.add(.init(id: UUID(), createdAt: .now, metadata: metadata, recommendation: recommendation, imageData: imageData, outcomeNote: ""))
-        overlay.showRecommendation(recommendation)
+        overlay.showRecommendation(recommendation) { [weak self, image] in
+            self?.analyze(image: image, metadata: metadata)
+        }
         status = "Analysis complete"
     }
 
